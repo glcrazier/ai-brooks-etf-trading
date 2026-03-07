@@ -1,0 +1,37 @@
+[futu]
+host = "127.0.0.1"
+port = 11111
+client_id = "brooks-trading"
+
+[market]
+exchange = "SH"
+securities = ["510050", "510300", "510500", "159915"]
+primary_timeframe = "5min"
+context_timeframe = "daily"
+
+[strategy]
+name = "brooks_pa"
+warm_up_bars = 200
+
+[strategy.risk]
+max_risk_per_trade_pct = 1.0
+max_daily_loss_pct = 3.0
+max_open_positions = 3
+initial_capital = 100000.0
+
+[strategy.pa]
+ema_period = 20
+swing_lookback = 10
+doji_threshold = 0.2
+sr_cluster_tolerance = 0.005
+
+[backtest]
+start_date = "2024-01-01"
+end_date = "2024-12-31"
+fill_model = "next_bar_open"
+slippage_bps = 5
+
+[logging]
+level = "info"
+format = "pretty"
+file = "logs/trading.log"

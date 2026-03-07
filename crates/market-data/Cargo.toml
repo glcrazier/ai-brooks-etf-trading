@@ -1,0 +1,23 @@
+[package]
+name = "brooks-market-data"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+brooks-core = { workspace = true }
+brooks-china-market = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+prost = { workspace = true }
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
+serde = { workspace = true }
+sha1 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }
+serde_json = { workspace = true }

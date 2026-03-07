@@ -1,0 +1,16 @@
+[package]
+name = "brooks-china-market"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+brooks-core = { workspace = true }
+chrono = { workspace = true }
+chrono-tz = { workspace = true }
+rust_decimal = { workspace = true }
+rust_decimal_macros = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+approx = { workspace = true }
