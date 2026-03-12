@@ -4,11 +4,12 @@ use brooks_core::market::{Direction, SecurityId};
 use brooks_core::position::Position;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use serde::Serialize;
 
 use crate::error::BacktestError;
 
 /// A point on the equity curve.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct EquityPoint {
     pub timestamp: DateTime<Utc>,
     pub equity: Decimal,

@@ -8,6 +8,7 @@ members = [
     "crates/order-manager",
     "crates/backtester",
     "crates/china-market",
+    "crates/http-api",
     "crates/app",
 ]
 
@@ -43,6 +44,10 @@ uuid = { version = "1", features = ["v4", "serde"] }
 async-trait = "0.1"
 # CLI
 clap = { version = "4", features = ["derive"] }
+# HTTP / Web
+axum = "0.8"
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace"] }
 # Testing
 approx = "0.5"
 
@@ -54,3 +59,4 @@ brooks-strategy = { path = "crates/strategy" }
 brooks-order-manager = { path = "crates/order-manager" }
 brooks-backtester = { path = "crates/backtester" }
 brooks-china-market = { path = "crates/china-market" }
+brooks-http-api = { path = "crates/http-api" }

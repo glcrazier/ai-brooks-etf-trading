@@ -1,15 +1,7 @@
 [package]
-name = "brooks-app"
+name = "brooks-http-api"
 version = "0.1.0"
 edition = "2021"
-
-[[bin]]
-name = "brooks-trader"
-path = "src/main.rs"
-
-[[bin]]
-name = "brooks-server"
-path = "src/bin/brooks_server.rs"
 
 [dependencies]
 brooks-core = { workspace = true }
@@ -19,17 +11,15 @@ brooks-market-data = { workspace = true }
 brooks-order-manager = { workspace = true }
 brooks-backtester = { workspace = true }
 brooks-china-market = { workspace = true }
-brooks-http-api = { workspace = true }
 anyhow = { workspace = true }
 axum = { workspace = true }
-clap = { workspace = true }
-config = { workspace = true }
-chrono = { workspace = true }
-rust_decimal = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-tokio = { workspace = true }
-toml = { workspace = true }
-tower-http = { workspace = true }
+chrono = { workspace = true }
+rust_decimal = { workspace = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true }
+uuid = { workspace = true }
+thiserror = { workspace = true }

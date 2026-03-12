@@ -1,11 +1,12 @@
 use rust_decimal::prelude::ToPrimitive;
 use rust_decimal::Decimal;
+use serde::Serialize;
 
 use crate::portfolio::EquityPoint;
 use crate::trade_log::TradeLog;
 
 /// Summary performance metrics for a completed backtest.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct BacktestMetrics {
     pub initial_capital: Decimal,
     pub final_equity: Decimal,

@@ -2,9 +2,10 @@ use brooks_core::market::{Direction, SecurityId};
 use brooks_core::signal::SignalType;
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
+use serde::Serialize;
 
 /// A completed round-trip trade record.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct TradeRecord {
     pub security: SecurityId,
     pub direction: Direction,
