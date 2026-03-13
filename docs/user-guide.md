@@ -11,7 +11,7 @@ Key capabilities:
 - **Price action analysis** - Classify bars, detect trends, channels, and support/resistance levels.
 - **Data fetching** - Download historical bars from Futu and save as CSV for offline use.
 
-Target instruments are Chinese ETFs that support T+0 intraday trading (e.g., SSE 50 ETF `510050`, CSI 300 ETF `510300`).
+Target instruments are Chinese ETFs (e.g., SSE 50 ETF `510050`, CSI 300 ETF `510300`), following T+1 settlement rules where shares bought today cannot be sold until the next trading day.
 
 ---
 

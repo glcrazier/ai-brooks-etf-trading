@@ -134,11 +134,6 @@ impl BrooksStrategy {
 
         // 6. For each candidate: size the position, create the order
         for candidate in candidates {
-            // Check T+0 eligibility for non-ETFs
-            if !self.market_rules.allows_intraday_round_trip(security) {
-                continue;
-            }
-
             let lot_size = self.market_rules.min_lot_size(security);
             let quantity = self.risk_mgr.calculate_position_size(
                 candidate.stop_target.risk_per_unit,
@@ -203,10 +198,10 @@ impl BrooksStrategy {
         Ok(vec![])
     }
 
-    /// Handle session close: force close all intraday positions.
+    /// Handle session close: under T+1 settlement, positions are held across sessions.
+    /// Only daily risk metrics are reset on session open.
     fn handle_session_close(&mut self) -> Result<Vec<StrategyAction>, StrategyError> {
-        let actions = self.position_mgr.close_all("Session close");
-        Ok(actions)
+        Ok(vec![])
     }
 }
 
@@ -398,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn test_session_close_closes_positions() {
+    fn test_session_close_preserves_positions() {
         let mut strategy = make_strategy();
 
         // Simulate a fill
@@ -407,17 +402,15 @@ mod tests {
             .unwrap();
         assert_eq!(strategy.open_position_count(), 1);
 
-        // Session close should generate close actions
+        // T+1: Session close should NOT close positions
         let actions = strategy
             .on_event(&MarketEvent::SessionClose {
                 exchange: Exchange::SH,
             })
             .unwrap();
-        assert_eq!(actions.len(), 1);
-        assert!(matches!(
-            &actions[0],
-            StrategyAction::ClosePosition { reason, .. } if reason == "Session close"
-        ));
+        assert!(actions.is_empty());
+        // Position still held
+        assert_eq!(strategy.open_position_count(), 1);
     }
 
     #[test]

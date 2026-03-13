@@ -19,7 +19,7 @@ pub enum StrategyError {
     #[error("Market not open for trading")]
     MarketClosed,
 
-    #[error("Security {0} does not allow intraday round trip")]
+    #[error("Security {0} follows T+1 settlement (no same-day round trip)")]
     NoIntradayRoundTrip(String),
 
     #[error("Warm-up period not complete: {bars_processed}/{bars_required}")]
@@ -81,7 +81,7 @@ mod tests {
         let err = StrategyError::NoIntradayRoundTrip("600000".to_string());
         assert_eq!(
             err.to_string(),
-            "Security 600000 does not allow intraday round trip"
+            "Security 600000 follows T+1 settlement (no same-day round trip)"
         );
     }
 

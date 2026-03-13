@@ -89,16 +89,8 @@ impl BacktestEngine {
                         &bar,
                     )?;
 
-                    // Force close any remaining positions at current price
-                    self.force_close_all(
-                        &mut portfolio,
-                        &mut trade_log,
-                        strategy,
-                        &mut position_signals,
-                        bar.timestamp,
-                    )?;
-
-                    // Clear stale pending orders from previous day
+                    // T+1: Positions are held across day boundaries.
+                    // Only cancel unfilled pending orders from previous day.
                     let stale_ids = order_book.order_ids();
                     for id in stale_ids {
                         let _ = order_book.cancel(&id);
@@ -383,7 +375,7 @@ impl BacktestEngine {
                         exit_time: close_time,
                         realized_pnl: pnl,
                         signal_type: signal.signal_type,
-                        exit_reason: "Force close (end of data/day)".to_string(),
+                        exit_reason: "Force close (end of data)".to_string(),
                     });
                 }
 

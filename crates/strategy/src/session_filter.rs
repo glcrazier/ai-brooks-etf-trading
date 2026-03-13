@@ -10,8 +10,6 @@ pub struct SessionFilter {
     no_entry_minutes_before_close: i64,
     /// Don't open new positions within this many minutes after session open
     no_entry_minutes_after_open: i64,
-    /// Force close positions this many minutes before session close
-    force_close_minutes_before_close: i64,
 }
 
 impl SessionFilter {
@@ -22,7 +20,6 @@ impl SessionFilter {
             bars_processed: 0,
             no_entry_minutes_before_close: 15,
             no_entry_minutes_after_open: 5,
-            force_close_minutes_before_close: 5,
         }
     }
 
@@ -72,14 +69,12 @@ impl SessionFilter {
 
     /// Whether the strategy should force-close all positions (end of day).
     ///
-    /// Returns `true` when within `force_close_minutes_before_close` of the
-    /// final session close (afternoon close).
-    pub fn should_force_close(&self, time: NaiveTime) -> bool {
-        // Only force close near the final close (afternoon)
-        let close = self.session.afternoon_close;
-        let threshold = close
-            - chrono::Duration::minutes(self.force_close_minutes_before_close);
-        time >= threshold && time <= close
+    /// Under T+1 settlement rules, positions are held across sessions.
+    /// No forced close at end of day.
+    pub fn should_force_close(&self, _time: NaiveTime) -> bool {
+        // T+1: All securities in China A-share market follow T+1 settlement.
+        // Positions are held overnight; no end-of-day forced close.
+        false
     }
 
     /// Reset for new trading day.
@@ -222,12 +217,12 @@ mod tests {
     }
 
     #[test]
-    fn test_should_force_close_near_end() {
+    fn test_should_not_force_close_t1() {
         let filter = SessionFilter::new(session(), 0);
-        // force_close_minutes = 5 before 15:00 = 14:55
-        assert!(filter.should_force_close(time(14, 55)));
-        assert!(filter.should_force_close(time(14, 58)));
-        assert!(filter.should_force_close(time(15, 0)));
+        // T+1: should_force_close always returns false
+        assert!(!filter.should_force_close(time(14, 55)));
+        assert!(!filter.should_force_close(time(14, 58)));
+        assert!(!filter.should_force_close(time(15, 0)));
     }
 
     #[test]

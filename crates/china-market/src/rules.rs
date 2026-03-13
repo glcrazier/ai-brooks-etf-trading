@@ -35,10 +35,11 @@ pub trait MarketRules: Send + Sync {
 pub struct ChinaMarketRules;
 
 impl MarketRules for ChinaMarketRules {
-    fn allows_intraday_round_trip(&self, security: &SecurityId) -> bool {
-        // ETFs support T+0 intraday trading in China
-        // Stocks follow T+1 settlement
-        matches!(security.security_type, SecurityType::ETF)
+    fn allows_intraday_round_trip(&self, _security: &SecurityId) -> bool {
+        // All securities in China A-share market follow T+1 settlement:
+        // shares bought today cannot be sold until the next trading day.
+        // This applies to both ETFs and stocks.
+        false
     }
 
     fn price_limit_pct(&self, security: &SecurityId) -> Decimal {
@@ -108,12 +109,14 @@ mod tests {
     }
 
     #[test]
-    fn test_etf_allows_t0() {
-        assert!(rules().allows_intraday_round_trip(&etf()));
+    fn test_etf_follows_t1() {
+        // ETFs in China follow T+1 settlement
+        assert!(!rules().allows_intraday_round_trip(&etf()));
     }
 
     #[test]
-    fn test_stock_disallows_t0() {
+    fn test_stock_follows_t1() {
+        // Stocks in China follow T+1 settlement
         assert!(!rules().allows_intraday_round_trip(&stock()));
     }
 

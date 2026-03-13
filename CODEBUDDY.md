@@ -4,7 +4,7 @@ This file provides guidance to CodeBuddy Code when working with code in this rep
 
 ## Project Overview
 
-AI-powered ETF trading system for Chinese securities markets, implementing Al Brooks Price Action methodology. Connects to Futu OpenAPI (FutuOpenD) for market data and paper trading. Target instruments are Chinese ETFs (T+0 intraday trading), with extensibility toward A-shares.
+AI-powered ETF trading system for Chinese securities markets, implementing Al Brooks Price Action methodology. Connects to Futu OpenAPI (FutuOpenD) for market data and paper trading. Target instruments are Chinese ETFs and A-shares, following T+1 settlement rules.
 
 ## Tech Stack
 
@@ -42,7 +42,7 @@ ai-brooks-etf-trading/
 │   ├── strategy/                # brooks-strategy: Strategy trait, BrooksStrategy, risk mgmt
 │   ├── order-manager/           # brooks-order-manager: OMS, paper/Futu execution
 │   ├── backtester/              # brooks-backtester: backtesting engine, metrics, reports
-│   ├── china-market/            # brooks-china-market: T+0/T+1 rules, sessions, calendar
+│   ├── china-market/            # brooks-china-market: T+1 settlement rules, sessions, calendar
 │   └── app/                     # brooks-app: CLI binary (backtest, paper, fetch-data)
 └── proto/                       # Futu OpenAPI .proto files (vendored)
 ```
@@ -71,7 +71,7 @@ brooks-app
 - **Trait-based abstractions.** `MarketDataProvider`, `OrderExecutor`, `Strategy`, `MarketRules`, `DataFeed` are all traits, enabling mocks for testing and swappable implementations.
 - **Same `Strategy` trait for backtesting and live.** Only the `OrderExecutor` and `MarketDataProvider` differ between backtest and paper trading modes.
 - **Multi-timeframe via separate `PriceActionAnalyzer` instances.** Each timeframe gets its own analyzer. The strategy coordinates them through `MultiTimeframeCoordinator`.
-- **Chinese market rules isolated in `brooks-china-market`.** T+0 for ETFs, T+1 for stocks, price limits, session hours (09:30-11:30, 13:00-15:00 CST), lunch break, and holiday calendar.
+- **Chinese market rules isolated in `brooks-china-market`.** T+1 settlement for all instruments (ETFs and stocks), price limits, session hours (09:30-11:30, 13:00-15:00 CST), lunch break, and holiday calendar.
 - **Futu OpenD via TCP/protobuf.** Uses `prost` + `prost-build` to compile vendored `.proto` files. FutuOpenD runs locally on `127.0.0.1:11111`.
 
 ## Core Domain Types (in `crates/core/src/`)
@@ -91,7 +91,7 @@ brooks-app
 | File | Types | Purpose |
 |------|-------|---------|
 | `session.rs` | `TradingSession` | Market hours, lunch break detection |
-| `rules.rs` | `MarketRules` trait, `ChinaMarketRules`, `PriceLimits` | T+0/T+1, price limits, tick size, lot size |
+| `rules.rs` | `MarketRules` trait, `ChinaMarketRules`, `PriceLimits` | T+1 settlement, price limits, tick size, lot size |
 | `calendar.rs` | `TradingCalendar` | Holiday calendar, makeup trading days |
 | `security_info.rs` | `SecurityInfo`, `Board` | ETF/stock metadata, board-specific rules |
 
