@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, FixedOffset, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 
@@ -73,11 +73,24 @@ impl Position {
     pub fn entry_value(&self) -> Decimal {
         self.entry_price * Decimal::from(self.quantity)
     }
+
+    /// Whether this position has settled under T+1 rules.
+    ///
+    /// A position is T+1 settled when the current CST date is strictly
+    /// after the CST date on which the position was opened. This means
+    /// shares bought today cannot be sold until the next trading day.
+    pub fn is_t1_settled(&self, as_of: DateTime<Utc>) -> bool {
+        let cst = FixedOffset::east_opt(8 * 3600).unwrap();
+        let open_date = self.opened_at.with_timezone(&cst).date_naive();
+        let current_date = as_of.with_timezone(&cst).date_naive();
+        current_date > open_date
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::{FixedOffset, TimeZone};
     use crate::market::Exchange;
     use rust_decimal_macros::dec;
 
@@ -189,5 +202,68 @@ mod tests {
         let pnl = pos.update_price(dec!(3.200));
         assert_eq!(pnl, dec!(100)); // (3.200 - 3.100) * 1000
         assert_eq!(pos.current_price, dec!(3.200));
+    }
+
+    #[test]
+    fn test_t1_settled_next_day() {
+        let cst = FixedOffset::east_opt(8 * 3600).unwrap();
+        // Opened at 2024-06-10 10:00 CST
+        let opened = cst
+            .with_ymd_and_hms(2024, 6, 10, 10, 0, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut pos = make_long_position();
+        pos.opened_at = opened;
+
+        // Check at 2024-06-11 09:30 CST (next day) -> settled
+        let next_day = cst
+            .with_ymd_and_hms(2024, 6, 11, 9, 30, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(pos.is_t1_settled(next_day));
+    }
+
+    #[test]
+    fn test_t1_not_settled_same_day() {
+        let cst = FixedOffset::east_opt(8 * 3600).unwrap();
+        // Opened at 2024-06-10 10:00 CST
+        let opened = cst
+            .with_ymd_and_hms(2024, 6, 10, 10, 0, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut pos = make_long_position();
+        pos.opened_at = opened;
+
+        // Check at 2024-06-10 14:55 CST (same day) -> NOT settled
+        let same_day = cst
+            .with_ymd_and_hms(2024, 6, 10, 14, 55, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(!pos.is_t1_settled(same_day));
+    }
+
+    #[test]
+    fn test_t1_not_settled_same_day_utc_next_day() {
+        let cst = FixedOffset::east_opt(8 * 3600).unwrap();
+        // Opened at 2024-06-10 23:00 CST (which is 2024-06-10 15:00 UTC)
+        let opened = cst
+            .with_ymd_and_hms(2024, 6, 10, 23, 0, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        let mut pos = make_long_position();
+        pos.opened_at = opened;
+
+        // Check at 2024-06-10 23:59 CST (same CST day, but next UTC day)
+        let same_cst_day = cst
+            .with_ymd_and_hms(2024, 6, 10, 23, 59, 0)
+            .single()
+            .unwrap()
+            .with_timezone(&Utc);
+        assert!(!pos.is_t1_settled(same_cst_day));
     }
 }

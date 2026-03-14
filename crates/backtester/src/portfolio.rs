@@ -70,11 +70,26 @@ impl Portfolio {
     }
 
     /// Close a position at the given price. Returns realized PnL.
+    ///
+    /// For Long positions, enforces T+1 settlement: the position cannot be
+    /// closed on the same CST date it was opened.
     pub fn close_position(
         &mut self,
         security: &SecurityId,
         fill_price: Decimal,
+        close_timestamp: DateTime<Utc>,
     ) -> Result<Decimal, BacktestError> {
+        // T+1 validation for Long positions
+        if let Some(position) = self.positions.get(security) {
+            if position.direction == Direction::Long
+                && !position.is_t1_settled(close_timestamp)
+            {
+                return Err(BacktestError::T1SettlementViolation {
+                    security: security.to_string(),
+                });
+            }
+        }
+
         let position = self
             .positions
             .remove(security)
@@ -234,7 +249,9 @@ mod tests {
             Utc::now(),
         )
         .unwrap();
-        let pnl = p.close_position(&security(), dec!(3.200)).unwrap();
+        // Use a timestamp from the next day so T+1 is satisfied
+        let next_day = Utc::now() + chrono::Duration::days(1);
+        let pnl = p.close_position(&security(), dec!(3.200), next_day).unwrap();
         assert_eq!(pnl, dec!(100)); // (3.200 - 3.100) * 1000
         assert_eq!(p.cash(), dec!(100100)); // 96900 + 3200
         assert_eq!(p.realized_pnl(), dec!(100));
@@ -253,7 +270,8 @@ mod tests {
             Utc::now(),
         )
         .unwrap();
-        let pnl = p.close_position(&security(), dec!(3.050)).unwrap();
+        let next_day = Utc::now() + chrono::Duration::days(1);
+        let pnl = p.close_position(&security(), dec!(3.050), next_day).unwrap();
         assert_eq!(pnl, dec!(-50));
         assert_eq!(p.cash(), dec!(99950));
     }
@@ -271,7 +289,8 @@ mod tests {
             Utc::now(),
         )
         .unwrap();
-        let pnl = p.close_position(&security(), dec!(3.000)).unwrap();
+        // Short positions are not subject to T+1 sell restriction
+        let pnl = p.close_position(&security(), dec!(3.000), Utc::now()).unwrap();
         assert_eq!(pnl, dec!(100));
     }
 
@@ -322,6 +341,71 @@ mod tests {
     #[test]
     fn test_close_nonexistent() {
         let mut p = Portfolio::new(dec!(100000));
-        assert!(p.close_position(&security(), dec!(3.100)).is_err());
+        let next_day = Utc::now() + chrono::Duration::days(1);
+        assert!(p.close_position(&security(), dec!(3.100), next_day).is_err());
+    }
+
+    #[test]
+    fn test_t1_blocks_same_day_long_close() {
+        let mut p = Portfolio::new(dec!(100000));
+        let now = Utc::now();
+        p.open_position(
+            security(),
+            Direction::Long,
+            1000,
+            dec!(3.100),
+            dec!(3.050),
+            None,
+            now,
+        )
+        .unwrap();
+        // Try to close on the same day
+        let result = p.close_position(&security(), dec!(3.200), now);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("T+1 settlement violation"));
+        // Position should still be open
+        assert!(p.has_position(&security()));
+    }
+
+    #[test]
+    fn test_t1_allows_next_day_long_close() {
+        let mut p = Portfolio::new(dec!(100000));
+        let now = Utc::now();
+        p.open_position(
+            security(),
+            Direction::Long,
+            1000,
+            dec!(3.100),
+            dec!(3.050),
+            None,
+            now,
+        )
+        .unwrap();
+        // Close on the next day — should succeed
+        let next_day = now + chrono::Duration::days(1);
+        let pnl = p.close_position(&security(), dec!(3.200), next_day).unwrap();
+        assert_eq!(pnl, dec!(100));
+    }
+
+    #[test]
+    fn test_t1_allows_same_day_short_close() {
+        let mut p = Portfolio::new(dec!(100000));
+        let now = Utc::now();
+        p.open_position(
+            security(),
+            Direction::Short,
+            1000,
+            dec!(3.100),
+            dec!(3.150),
+            None,
+            now,
+        )
+        .unwrap();
+        // Short positions can be closed same day (T+1 only applies to Long)
+        let pnl = p.close_position(&security(), dec!(3.000), now).unwrap();
+        assert_eq!(pnl, dec!(100));
     }
 }

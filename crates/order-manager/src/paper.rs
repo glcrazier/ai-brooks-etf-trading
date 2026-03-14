@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use async_trait::async_trait;
-use chrono::Utc;
+use chrono::{DateTime, FixedOffset, Utc};
 use rust_decimal::Decimal;
 use tracing::debug;
 
@@ -28,6 +28,8 @@ pub struct PaperExecutor {
     market_rules: Box<dyn MarketRules>,
     /// Slippage in basis points (e.g., 5 = 0.05%).
     slippage_bps: u32,
+    /// Tracks open Long positions by their open timestamp for T+1 validation.
+    long_positions: HashMap<SecurityId, DateTime<Utc>>,
 }
 
 impl PaperExecutor {
@@ -39,6 +41,7 @@ impl PaperExecutor {
             current_prices: HashMap::new(),
             market_rules,
             slippage_bps,
+            long_positions: HashMap::new(),
         }
     }
 
@@ -134,7 +137,26 @@ impl PaperExecutor {
     }
 
     /// Validate an order against market rules.
+    ///
+    /// Also enforces T+1: if this is a sell order (Direction::Short) for a
+    /// security with a tracked Long position opened today (same CST date),
+    /// the order is rejected.
     fn validate_order(&self, order: &Order) -> Result<(), OmsError> {
+        // T+1 validation for sell orders on Long positions
+        if order.direction == Direction::Short {
+            if let Some(opened_at) = self.long_positions.get(&order.security) {
+                let cst = FixedOffset::east_opt(8 * 3600).unwrap();
+                let open_date = opened_at.with_timezone(&cst).date_naive();
+                let now_date = Utc::now().with_timezone(&cst).date_naive();
+                if now_date <= open_date {
+                    return Err(OmsError::MarketRulesViolation(format!(
+                        "T+1 violation: cannot sell {} on the same day it was bought",
+                        order.security
+                    )));
+                }
+            }
+        }
+
         let lot_size = self.market_rules.min_lot_size(&order.security);
         if lot_size > 0 && !order.quantity.is_multiple_of(lot_size) {
             return Err(OmsError::MarketRulesViolation(format!(
@@ -153,6 +175,19 @@ impl PaperExecutor {
     /// Get the number of pending orders.
     pub fn pending_count(&self) -> usize {
         self.pending_orders.len()
+    }
+
+    /// Register a Long position for T+1 settlement tracking.
+    ///
+    /// Call this when a Long fill is received so that subsequent sell
+    /// orders can be validated against T+1 rules.
+    pub fn register_long_position(&mut self, security: SecurityId, opened_at: DateTime<Utc>) {
+        self.long_positions.insert(security, opened_at);
+    }
+
+    /// Unregister a position after it has been closed.
+    pub fn unregister_position(&mut self, security: &SecurityId) {
+        self.long_positions.remove(security);
     }
 }
 
@@ -545,5 +580,51 @@ mod tests {
     async fn test_is_ready() {
         let exec = make_executor_no_slippage();
         assert!(exec.is_ready());
+    }
+
+    #[tokio::test]
+    async fn test_t1_blocks_same_day_sell() {
+        let mut exec = make_executor_no_slippage();
+        exec.current_prices.insert(security(), dec!(3.200));
+
+        // Register a Long position opened now
+        exec.register_long_position(security(), Utc::now());
+
+        // Try to submit a sell (Short direction) order — should be rejected
+        let order = Order::market(security(), Direction::Short, 100);
+        let result = exec.submit(&order).await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("T+1 violation"));
+    }
+
+    #[tokio::test]
+    async fn test_t1_allows_next_day_sell() {
+        let mut exec = make_executor_no_slippage();
+        exec.current_prices.insert(security(), dec!(3.200));
+
+        // Register a Long position opened yesterday
+        let yesterday = Utc::now() - chrono::Duration::days(1);
+        exec.register_long_position(security(), yesterday);
+
+        // Sell order should succeed
+        let order = Order::market(security(), Direction::Short, 100);
+        exec.submit(&order).await.unwrap();
+        let fills = exec.poll_fills().await.unwrap();
+        assert_eq!(fills.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_register_unregister_position() {
+        let mut exec = make_executor_no_slippage();
+        exec.register_long_position(security(), Utc::now());
+        exec.unregister_position(&security());
+
+        // After unregistering, sell orders should be allowed
+        exec.current_prices.insert(security(), dec!(3.200));
+        let order = Order::market(security(), Direction::Short, 100);
+        exec.submit(&order).await.unwrap();
     }
 }

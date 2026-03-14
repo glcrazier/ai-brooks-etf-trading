@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use brooks_core::market::{Direction, SecurityId};
 use brooks_core::position::Position;
 use brooks_pa_engine::trend::SwingPoint;
+use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 
 use crate::stop_target::StopTargetCalculator;
@@ -65,11 +66,13 @@ impl PositionManager {
 
     /// Update a position with new market data and return any actions needed.
     ///
-    /// Checks: stop hit, target hit, trailing stop update, increments bars_held.
+    /// Checks: T+1 settlement (Long only), stop hit, target hit, trailing stop update,
+    /// increments bars_held.
     pub fn update(
         &mut self,
         security: &SecurityId,
         current_price: Decimal,
+        current_timestamp: DateTime<Utc>,
         swing_lows: &[SwingPoint],
         swing_highs: &[SwingPoint],
     ) -> Vec<StrategyAction> {
@@ -85,6 +88,12 @@ impl PositionManager {
 
         // 1. Check stop loss hit
         if managed.position.is_stop_hit(current_price) {
+            // T+1: Cannot close Long positions on the same day they were opened
+            if managed.position.direction == Direction::Long
+                && !managed.position.is_t1_settled(current_timestamp)
+            {
+                return actions;
+            }
             actions.push(StrategyAction::ClosePosition {
                 security: security.clone(),
                 reason: "Stop loss hit".to_string(),
@@ -94,6 +103,12 @@ impl PositionManager {
 
         // 2. Check target hit
         if managed.position.is_target_hit(current_price) {
+            // T+1: Cannot close Long positions on the same day they were opened
+            if managed.position.direction == Direction::Long
+                && !managed.position.is_t1_settled(current_timestamp)
+            {
+                return actions;
+            }
             actions.push(StrategyAction::ClosePosition {
                 security: security.clone(),
                 reason: "Target hit".to_string(),
@@ -171,11 +186,17 @@ mod tests {
     use super::*;
     use brooks_core::market::Exchange;
     use brooks_pa_engine::trend::SwingPointType;
-    use chrono::Utc;
+    use chrono::{Duration, Utc};
     use rust_decimal_macros::dec;
 
     fn etf_510050() -> SecurityId {
         SecurityId::etf("510050", Exchange::SH)
+    }
+
+    /// A timestamp guaranteed to be the next CST day from now,
+    /// so T+1 settlement is satisfied.
+    fn next_day() -> DateTime<Utc> {
+        Utc::now() + Duration::days(1)
     }
 
     fn long_position(entry: Decimal, stop: Decimal, target: Option<Decimal>) -> Position {
@@ -221,8 +242,8 @@ mod tests {
         let pos = long_position(dec!(3.500), dec!(3.450), Some(dec!(3.600)));
         mgr.add_position(pos, dec!(0.050), Some(dec!(3.600)));
 
-        // Price drops to stop
-        let actions = mgr.update(&etf_510050(), dec!(3.440), &[], &[]);
+        // Price drops to stop — use next_day so T+1 is satisfied
+        let actions = mgr.update(&etf_510050(), dec!(3.440), next_day(), &[], &[]);
         assert_eq!(actions.len(), 1);
         assert!(matches!(&actions[0], StrategyAction::ClosePosition { reason, .. } if reason.contains("Stop")));
     }
@@ -233,8 +254,8 @@ mod tests {
         let pos = long_position(dec!(3.500), dec!(3.450), Some(dec!(3.600)));
         mgr.add_position(pos, dec!(0.050), Some(dec!(3.600)));
 
-        // Price reaches target
-        let actions = mgr.update(&etf_510050(), dec!(3.610), &[], &[]);
+        // Price reaches target — use next_day so T+1 is satisfied
+        let actions = mgr.update(&etf_510050(), dec!(3.610), next_day(), &[], &[]);
         assert_eq!(actions.len(), 1);
         assert!(matches!(&actions[0], StrategyAction::ClosePosition { reason, .. } if reason.contains("Target")));
     }
@@ -246,7 +267,7 @@ mod tests {
         mgr.add_position(pos, dec!(0.050), None);
 
         // Price moves up by 1R (0.050) -> 3.550
-        let actions = mgr.update(&etf_510050(), dec!(3.550), &[], &[]);
+        let actions = mgr.update(&etf_510050(), dec!(3.550), next_day(), &[], &[]);
         // No trailing stop action yet (no swing points above stop)
         assert!(actions.is_empty());
         // But trail_active should be true
@@ -261,7 +282,7 @@ mod tests {
         mgr.add_position(pos, dec!(0.050), None);
 
         // First, activate trailing (1R profit)
-        mgr.update(&etf_510050(), dec!(3.560), &[], &[]);
+        mgr.update(&etf_510050(), dec!(3.560), next_day(), &[], &[]);
 
         // Now provide a swing low above stop
         let swing_lows = vec![SwingPoint {
@@ -270,7 +291,7 @@ mod tests {
             timestamp: Utc::now(),
             point_type: SwingPointType::Low,
         }];
-        let actions = mgr.update(&etf_510050(), dec!(3.570), &swing_lows, &[]);
+        let actions = mgr.update(&etf_510050(), dec!(3.570), next_day(), &swing_lows, &[]);
 
         assert_eq!(actions.len(), 1);
         assert!(matches!(
@@ -285,9 +306,9 @@ mod tests {
         let pos = long_position(dec!(3.500), dec!(3.450), None);
         mgr.add_position(pos, dec!(0.050), None);
 
-        mgr.update(&etf_510050(), dec!(3.510), &[], &[]);
-        mgr.update(&etf_510050(), dec!(3.520), &[], &[]);
-        mgr.update(&etf_510050(), dec!(3.530), &[], &[]);
+        mgr.update(&etf_510050(), dec!(3.510), next_day(), &[], &[]);
+        mgr.update(&etf_510050(), dec!(3.520), next_day(), &[], &[]);
+        mgr.update(&etf_510050(), dec!(3.530), next_day(), &[], &[]);
 
         let managed = mgr.get_position(&etf_510050()).unwrap();
         assert_eq!(managed.bars_held, 3);
@@ -334,11 +355,38 @@ mod tests {
             timestamp: Utc::now(),
             point_type: SwingPointType::Low,
         }];
-        let actions = mgr.update(&etf_510050(), dec!(3.530), &swing_lows, &[]);
+        let actions = mgr.update(&etf_510050(), dec!(3.530), next_day(), &swing_lows, &[]);
 
         // Should not activate trailing stop yet
         assert!(actions.is_empty());
         let managed = mgr.get_position(&etf_510050()).unwrap();
         assert!(!managed.trail_active);
+    }
+
+    #[test]
+    fn test_t1_blocks_same_day_stop_close() {
+        let mut mgr = make_manager();
+        let pos = long_position(dec!(3.500), dec!(3.450), Some(dec!(3.600)));
+        mgr.add_position(pos, dec!(0.050), Some(dec!(3.600)));
+
+        // Price drops to stop, but same day -> T+1 blocks the close
+        let same_day = Utc::now();
+        let actions = mgr.update(&etf_510050(), dec!(3.440), same_day, &[], &[]);
+        assert!(actions.is_empty());
+        // Position should still be open
+        assert!(mgr.has_position(&etf_510050()));
+    }
+
+    #[test]
+    fn test_t1_blocks_same_day_target_close() {
+        let mut mgr = make_manager();
+        let pos = long_position(dec!(3.500), dec!(3.450), Some(dec!(3.600)));
+        mgr.add_position(pos, dec!(0.050), Some(dec!(3.600)));
+
+        // Price hits target, but same day -> T+1 blocks the close
+        let same_day = Utc::now();
+        let actions = mgr.update(&etf_510050(), dec!(3.610), same_day, &[], &[]);
+        assert!(actions.is_empty());
+        assert!(mgr.has_position(&etf_510050()));
     }
 }

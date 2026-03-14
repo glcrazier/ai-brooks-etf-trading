@@ -100,6 +100,7 @@ impl BrooksStrategy {
         let position_actions = self.position_mgr.update(
             security,
             bar.close,
+            bar.timestamp,
             &swing_lows,
             &swing_highs,
         );
@@ -182,11 +183,12 @@ impl BrooksStrategy {
         &mut self,
         security: &SecurityId,
         price: Decimal,
+        timestamp: DateTime<Utc>,
     ) -> Result<Vec<StrategyAction>, StrategyError> {
         // In v1, tick-level stop checking: update position price and check stops
         let swing_lows = self.mtf.primary_analyzer().trend_analyzer().swing_lows().to_vec();
         let swing_highs = self.mtf.primary_analyzer().trend_analyzer().swing_highs().to_vec();
-        let actions = self.position_mgr.update(security, price, &swing_lows, &swing_highs);
+        let actions = self.position_mgr.update(security, price, timestamp, &swing_lows, &swing_highs);
         Ok(actions)
     }
 
@@ -214,8 +216,8 @@ impl Strategy for BrooksStrategy {
                 timeframe,
             } => self.handle_bar(security, bar, timeframe),
             MarketEvent::TickUpdate {
-                security, price, ..
-            } => self.handle_tick(security, *price),
+                security, price, timestamp, ..
+            } => self.handle_tick(security, *price, *timestamp),
             MarketEvent::SessionOpen { .. } => self.handle_session_open(),
             MarketEvent::SessionClose { .. } => self.handle_session_close(),
             MarketEvent::SessionBreakStart { .. } => Ok(vec![]),

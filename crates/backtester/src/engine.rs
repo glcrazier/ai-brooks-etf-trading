@@ -321,7 +321,7 @@ impl BacktestEngine {
             StrategyAction::ClosePosition { security, reason } => {
                 if portfolio.has_position(security) {
                     let exit_price = bar.close;
-                    let pnl = portfolio.close_position(security, exit_price)?;
+                    let pnl = portfolio.close_position(security, exit_price, bar.timestamp)?;
 
                     // Record trade
                     if let Some((signal, entry_time)) = position_signals.remove(security) {
@@ -362,7 +362,7 @@ impl BacktestEngine {
         for security in securities {
             if let Some(pos) = portfolio.get_position(&security) {
                 let exit_price = pos.current_price;
-                let pnl = portfolio.close_position(&security, exit_price)?;
+                let pnl = portfolio.close_position(&security, exit_price, close_time)?;
 
                 if let Some((signal, entry_time)) = position_signals.remove(&security) {
                     trade_log.record(TradeRecord {

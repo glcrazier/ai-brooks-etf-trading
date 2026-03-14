@@ -24,6 +24,9 @@ pub enum BacktestError {
 
     #[error("Position not found: {0}")]
     PositionNotFound(String),
+
+    #[error("T+1 settlement violation: cannot sell {security} on the same day it was bought")]
+    T1SettlementViolation { security: String },
 }
 
 #[cfg(test)]
@@ -75,5 +78,16 @@ mod tests {
         let strategy_err = StrategyError::MarketClosed;
         let backtest_err: BacktestError = strategy_err.into();
         assert!(backtest_err.to_string().contains("Market not open"));
+    }
+
+    #[test]
+    fn test_t1_settlement_violation_display() {
+        let err = BacktestError::T1SettlementViolation {
+            security: "510050.SH".to_string(),
+        };
+        assert_eq!(
+            err.to_string(),
+            "T+1 settlement violation: cannot sell 510050.SH on the same day it was bought"
+        );
     }
 }
